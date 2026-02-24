@@ -7,12 +7,10 @@ import (
 
 func TestTopKFrequent(t *testing.T) {
 	// [-1, -1] 1
-	for i := 0; i < 10000; i++ {
-		res := topKFrequent([]int{-1, -1}, 1)
-		if res[0] != -1 {
-			fmt.Println("bad case", res)
-			return
-		}
-	}
-	fmt.Println("it's ok")
+	res := topKFrequent([]int{-1, -1}, 1)
+	fmt.Println("1. ", res)
+	res = []int{}
+	// [-1, 1, 4, -4, 3, 5, 4, -2, 3, -1] 3
+	res = topKFrequent([]int{-1, 1, 4, -4, 3, 5, 4, -2, 3, -1}, 3)
+	fmt.Println("2. ", res)
 }

@@ -4,6 +4,10 @@ import (
 	"github.com/TylerTang06/-algorithm015/util"
 )
 
+/*
+589.n叉树的前序遍历
+*/
+
 /**
  * Definition for a Node.
  * type Node struct {

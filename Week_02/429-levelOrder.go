@@ -6,6 +6,10 @@ import (
 	"github.com/TylerTang06/-algorithm015/util"
 )
 
+/*
+429. n叉树的层序遍历
+*/
+
 /**
  * Definition for a Node.
  * type Node struct {
@@ -21,6 +25,7 @@ func levelOrder(root *util.Node) [][]int {
 
 	result := [][]int{}
 	myQue := list.New()
+	// 队列先进先出
 	myQue.PushBack(root)
 	for myQue.Len() > 0 {
 		len := myQue.Len()
