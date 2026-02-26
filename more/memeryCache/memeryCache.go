@@ -11,8 +11,9 @@ import (
 	"time"
 )
 
+// CacheConfig 缓存配置
 type CacheConfig struct {
-	// MaxItems          int           // 最大缓存数量
+	// MaxItems   int           // 最大缓存数量
 	MaxMemerySize int           // 最大内存大小
 	DefaultTTL    time.Duration // 默认过期时间
 	CleanInterval time.Duration // 清理间隔
@@ -23,7 +24,8 @@ type CacheConfig struct {
 	Metrics       bool          // 是否启用指标
 }
 
-type CacheStats struct {
+// cacheStats 缓存统计信息
+type cacheStats struct {
 	Hits          int // 命中次数
 	Misses        int // 未命中次数
 	Evicts        int // 驱逐次数
@@ -38,9 +40,10 @@ type CacheStats struct {
 	DeleteSuccess int //	删除成功次数
 	DeleteFailed  int // 删除失败次数
 	ClearOps      int // 清空操作次数
-	// MaxItems      int // 最大缓存数量
+	// MaxItems   int // 最大缓存数量
 }
 
+// cacheItem 缓存项
 type cacheItem struct {
 	key          string        // key
 	value        interface{}   // 值
@@ -53,20 +56,22 @@ type cacheItem struct {
 	// priority  int           // 优先级
 }
 
+// cacheShard 缓存分片
 type cacheShard struct {
 	mu            sync.RWMutex          // 读写锁
 	items         map[string]*cacheItem // 缓存项
-	stats         *CacheStats           // 统计信息
+	stats         *cacheStats           // 统计信息
 	logger        Logger                // 日志接口
 	evictType     string                //	驱逐类型
 	size          int                   // 当前缓存大小
 	maxMemerySize int                   // 最大内存大小
-	// maxItems      int                   // 最大缓存数量
-	itemsCount int         // 项目计数
-	list       *list.List  // 链表
-	heap       *expireHeap // 过期堆
+	itemsCount    int                   // 项目计数
+	list          *list.List            // 链表
+	heap          *expireHeap           // 过期堆
+	// maxItems   int                   // 最大缓存数量
 }
 
+// expireHeap 过期堆
 type expireHeap []*cacheItem
 
 func (h expireHeap) Len() int { return len(h) }
@@ -97,19 +102,21 @@ func (h *expireHeap) Pop() interface{} {
 	return item
 }
 
-type MemoryCache struct {
+// memoryCache 内存缓存
+type memoryCache struct {
 	config  *CacheConfig
-	stats   *CacheStats
+	stats   *cacheStats
 	shards  []*cacheShard
 	logger  Logger
 	closeCh chan struct{}
 	wg      sync.WaitGroup
 }
 
-func NewMemoryCache(config *CacheConfig) *MemoryCache {
+// NewmemoryCache 创建一个新的内存缓存
+func NewmemoryCache(config *CacheConfig) *memoryCache {
 	if config == nil {
 		config = &CacheConfig{
-			// MaxItems:          10000,
+			// MaxItems:   10000,
 			MaxMemerySize: 100 * 1024 * 1024, // 100MB
 			DefaultTTL:    5 * time.Minute,
 			CleanInterval: 1 * time.Minute,
@@ -125,9 +132,9 @@ func NewMemoryCache(config *CacheConfig) *MemoryCache {
 		config.Logger = &defaultLogger{}
 	}
 
-	cache := &MemoryCache{
+	cache := &memoryCache{
 		config: config,
-		stats: &CacheStats{
+		stats: &cacheStats{
 			MaxMemerySize: config.MaxMemerySize,
 		},
 		shards:  make([]*cacheShard, config.Shards),
@@ -141,7 +148,7 @@ func NewMemoryCache(config *CacheConfig) *MemoryCache {
 
 		cache.shards[i] = &cacheShard{
 			items: map[string]*cacheItem{},
-			stats: &CacheStats{
+			stats: &cacheStats{
 				MaxMemerySize: maxMemerySize,
 			},
 			logger:        config.Logger,
@@ -162,7 +169,7 @@ func NewMemoryCache(config *CacheConfig) *MemoryCache {
 }
 
 // getShard 获取对应的分片
-func (c *MemoryCache) getShard(key string) *cacheShard {
+func (c *memoryCache) getShard(key string) *cacheShard {
 	// 使用简单的FNV哈希
 	h := fnv.New32a()
 	h.Write([]byte(key))
@@ -170,7 +177,8 @@ func (c *MemoryCache) getShard(key string) *cacheShard {
 	return c.shards[hash%uint32(len(c.shards))]
 }
 
-func (c *MemoryCache) cleanupLoop() {
+// cleanupLoop 定期清理过期数据
+func (c *memoryCache) cleanupLoop() {
 	defer c.wg.Done()
 
 	ticker := time.NewTicker(c.config.CleanInterval)
@@ -188,7 +196,7 @@ func (c *MemoryCache) cleanupLoop() {
 }
 
 // cleanupExpired 清理过期数据
-func (c *MemoryCache) cleanupExpired() {
+func (c *memoryCache) cleanupExpired() {
 	now := time.Now()
 	expiredCount := 0
 
@@ -220,7 +228,8 @@ func (c *MemoryCache) cleanupExpired() {
 	}
 }
 
-func (c *MemoryCache) Set(ctx context.Context, key string, value interface{}, ttl ...time.Duration) error {
+// Set 设置缓存
+func (c *memoryCache) Set(ctx context.Context, key string, value interface{}, ttl ...time.Duration) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -231,14 +240,16 @@ func (c *MemoryCache) Set(ctx context.Context, key string, value interface{}, tt
 	return shard.set(key, value, c.getTTL(ttl...))
 }
 
-func (c *MemoryCache) getTTL(ttl ...time.Duration) time.Duration {
+// getTTL 获取TTL
+func (c *memoryCache) getTTL(ttl ...time.Duration) time.Duration {
 	if len(ttl) > 0 && ttl[0] > 0 {
 		return ttl[0]
 	}
 	return c.config.DefaultTTL
 }
 
-func (c *MemoryCache) Get(ctx context.Context, key string) (interface{}, bool, error) {
+// Get 获取缓存
+func (c *memoryCache) Get(ctx context.Context, key string) (interface{}, bool, error) {
 	select {
 	case <-ctx.Done():
 		return nil, false, ctx.Err()
@@ -249,7 +260,8 @@ func (c *MemoryCache) Get(ctx context.Context, key string) (interface{}, bool, e
 	return shard.get(key)
 }
 
-func (c *MemoryCache) GetWithTTL(ctx context.Context, key string) (interface{}, time.Duration, bool, error) {
+// GetWithTTL 获取缓存和TTL
+func (c *memoryCache) GetWithTTL(ctx context.Context, key string) (interface{}, time.Duration, bool, error) {
 	select {
 	case <-ctx.Done():
 		return nil, 0, false, ctx.Err()
@@ -260,6 +272,7 @@ func (c *MemoryCache) GetWithTTL(ctx context.Context, key string) (interface{}, 
 	return shard.getWithTTL(key)
 }
 
+// removeFromList 从列表中移除条目
 func (s *cacheShard) removeFromList(item *cacheItem) {
 	if item.element != nil {
 		s.list.Remove(item.element)
@@ -267,6 +280,7 @@ func (s *cacheShard) removeFromList(item *cacheItem) {
 	}
 }
 
+// set 设置缓存
 func (s *cacheShard) set(key string, value interface{}, ttl time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -326,22 +340,26 @@ func (s *cacheShard) set(key string, value interface{}, ttl time.Duration) error
 	return nil
 }
 
+// addToList 添加到列表
 func (s *cacheShard) addToList(item *cacheItem) {
 	if s.evictType == "LRU" {
 		item.element = s.list.PushFront(item)
 	}
 }
 
+// addToHeap 添加到堆
 func (s *cacheShard) addToHeap(item *cacheItem) {
 	heap.Push(s.heap, item)
 }
 
+// removeFromHeap 从堆中移除条目
 func (s *cacheShard) removeFromHeap(item *cacheItem) {
 	if item.index >= 0 {
 		heap.Remove(s.heap, item.index)
 	}
 }
 
+// evict 淘汰
 func (s *cacheShard) evict(needSize int) bool {
 	for s.size+needSize > s.maxMemerySize && len(s.items) > 0 {
 		var item *cacheItem
@@ -374,6 +392,7 @@ func (s *cacheShard) evict(needSize int) bool {
 	return s.size+needSize <= s.maxMemerySize
 }
 
+// getEvictItemByLRU 获取淘汰的LRU条目
 func (s *cacheShard) getEvictItemByLRU() (item *cacheItem) {
 	if elem := s.list.Back(); elem != nil {
 		// s.list.Remove(elem)
@@ -382,6 +401,7 @@ func (s *cacheShard) getEvictItemByLRU() (item *cacheItem) {
 	return
 }
 
+// removeItem 移除条目
 func (s *cacheShard) removeItem(item *cacheItem) {
 	s.removeFromList(item)
 	s.removeFromHeap(item)
@@ -391,6 +411,7 @@ func (s *cacheShard) removeItem(item *cacheItem) {
 	s.stats.Size = s.size
 }
 
+// get 获取缓存
 func (s *cacheShard) get(key string) (interface{}, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -426,6 +447,7 @@ func (s *cacheShard) get(key string) (interface{}, bool, error) {
 	return item.value, true, nil
 }
 
+// getWithTTL 获取缓存 并返回ttl
 func (s *cacheShard) getWithTTL(key string) (interface{}, time.Duration, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -453,7 +475,7 @@ func (s *cacheShard) getWithTTL(key string) (interface{}, time.Duration, bool, e
 }
 
 // Close 关闭缓存 避免重读调用
-func (c *MemoryCache) Close() {
+func (c *memoryCache) Close() {
 	close(c.closeCh)
 	c.wg.Wait()
 }

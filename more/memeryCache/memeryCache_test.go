@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-func TestNewMemoryCache(t *testing.T) {
+func TestNewmemoryCache(t *testing.T) {
 	// 测试默认配置
-	cache := NewMemoryCache(nil)
+	cache := NewmemoryCache(nil)
 	if cache == nil {
-		t.Fatal("NewMemoryCache returned nil")
+		t.Fatal("NewmemoryCache returned nil")
 	}
 
 	if cache.config.MaxMemerySize != 100*1024*1024 {
@@ -33,7 +33,7 @@ func TestNewMemoryCache(t *testing.T) {
 	cache.Close()
 }
 
-func TestNewMemoryCacheWithConfig(t *testing.T) {
+func TestNewmemoryCacheWithConfig(t *testing.T) {
 	config := &CacheConfig{
 		MaxMemerySize: 50 * 1024 * 1024,
 		DefaultTTL:    10 * time.Minute,
@@ -43,9 +43,9 @@ func TestNewMemoryCacheWithConfig(t *testing.T) {
 		Metrics:       true,
 	}
 
-	cache := NewMemoryCache(config)
+	cache := NewmemoryCache(config)
 	if cache == nil {
-		t.Fatal("NewMemoryCache returned nil")
+		t.Fatal("NewmemoryCache returned nil")
 	}
 
 	if cache.config.MaxMemerySize != 50*1024*1024 {
@@ -63,8 +63,8 @@ func TestNewMemoryCacheWithConfig(t *testing.T) {
 	cache.Close()
 }
 
-func TestMemoryCache_SetAndGet(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_SetAndGet(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -89,8 +89,8 @@ func TestMemoryCache_SetAndGet(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_GetNotExists(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_GetNotExists(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -109,8 +109,8 @@ func TestMemoryCache_GetNotExists(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_SetWithCustomTTL(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_SetWithCustomTTL(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -141,8 +141,8 @@ func TestMemoryCache_SetWithCustomTTL(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_GetWithTTL(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_GetWithTTL(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -171,8 +171,8 @@ func TestMemoryCache_GetWithTTL(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_UpdateValue(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_UpdateValue(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -204,8 +204,8 @@ func TestMemoryCache_UpdateValue(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_ContextCancellation(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_ContextCancellation(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -226,7 +226,7 @@ func TestMemoryCache_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_EvictByLRU(t *testing.T) {
+func TestmemoryCache_EvictByLRU(t *testing.T) {
 	config := &CacheConfig{
 		MaxMemerySize: 5 * 1024, // 5KB
 		DefaultTTL:    10 * time.Minute,
@@ -235,7 +235,7 @@ func TestMemoryCache_EvictByLRU(t *testing.T) {
 		Shards:        1,
 	}
 
-	cache := NewMemoryCache(config)
+	cache := NewmemoryCache(config)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -272,7 +272,7 @@ func TestMemoryCache_EvictByLRU(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_Expiration(t *testing.T) {
+func TestmemoryCache_Expiration(t *testing.T) {
 	config := &CacheConfig{
 		MaxMemerySize: 10 * 1024 * 1024,
 		DefaultTTL:    5 * time.Minute,
@@ -281,7 +281,7 @@ func TestMemoryCache_Expiration(t *testing.T) {
 		Shards:        1,
 	}
 
-	cache := NewMemoryCache(config)
+	cache := NewmemoryCache(config)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -314,8 +314,8 @@ func TestMemoryCache_Expiration(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_DifferentValueTypes(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_DifferentValueTypes(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -354,7 +354,7 @@ func TestMemoryCache_DifferentValueTypes(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_Sharding(t *testing.T) {
+func TestmemoryCache_Sharding(t *testing.T) {
 	config := &CacheConfig{
 		MaxMemerySize: 10 * 1024 * 1024,
 		DefaultTTL:    5 * time.Minute,
@@ -363,7 +363,7 @@ func TestMemoryCache_Sharding(t *testing.T) {
 		Shards:        4,
 	}
 
-	cache := NewMemoryCache(config)
+	cache := NewmemoryCache(config)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -391,8 +391,8 @@ func TestMemoryCache_Sharding(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_ConcurrentAccess(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_ConcurrentAccess(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
@@ -434,7 +434,7 @@ func TestMemoryCache_ConcurrentAccess(t *testing.T) {
 }
 
 func TestCacheShard_getShard(t *testing.T) {
-	cache := NewMemoryCache(nil)
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	// 测试相同的 key 总是映射到相同的分片
@@ -455,7 +455,7 @@ func TestCacheShard_getShard(t *testing.T) {
 }
 
 func TestCacheShard_getTTL(t *testing.T) {
-	cache := NewMemoryCache(&CacheConfig{
+	cache := NewmemoryCache(&CacheConfig{
 		DefaultTTL: 10 * time.Minute,
 		Shards:     4,
 	})
@@ -506,8 +506,8 @@ func TestExpireHeap(t *testing.T) {
 	}
 }
 
-func TestMemoryCache_Close(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_Close(t *testing.T) {
+	cache := NewmemoryCache(nil)
 
 	// Close 应该安全地调用
 	cache.Close()
@@ -516,8 +516,8 @@ func TestMemoryCache_Close(t *testing.T) {
 	// cache.Close()
 }
 
-func TestMemoryCache_ZeroTTL(t *testing.T) {
-	cache := NewMemoryCache(nil)
+func TestmemoryCache_ZeroTTL(t *testing.T) {
+	cache := NewmemoryCache(nil)
 	defer cache.Close()
 
 	ctx := context.Background()
