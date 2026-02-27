@@ -37,7 +37,7 @@ type cacheStats struct {
 	GetFailed     int // 获取失败次数
 	SetSuccess    int // 设置成功次数
 	SetFailed     int // 设置失败次数
-	DeleteSuccess int //	删除成功次数
+	DeleteSuccess int // 删除成功次数
 	DeleteFailed  int // 删除失败次数
 	ClearOps      int // 清空操作次数
 	// MaxItems   int // 最大缓存数量
@@ -45,15 +45,15 @@ type cacheStats struct {
 
 // cacheItem 缓存项
 type cacheItem struct {
-	key          string        // key
-	value        interface{}   // 值
-	expireAt     time.Time     // 过期时间
-	accessedAt   time.Time     // 访问时间
-	size         int           // 大小
-	accessedSize int           // 访问大小
-	element      *list.Element // 链表元素
-	index        int           // 索引
-	// priority  int           // 优先级
+	key        string        // key
+	value      interface{}   // 值
+	expireAt   time.Time     // 过期时间
+	accessedAt time.Time     // 访问时间
+	size       int           // 大小
+	accesseds  int           // 访问大小
+	element    *list.Element // 链表元素
+	index      int           // 索引
+	// priority int          // 优先级
 }
 
 // cacheShard 缓存分片
@@ -62,7 +62,7 @@ type cacheShard struct {
 	items         map[string]*cacheItem // 缓存项
 	stats         *cacheStats           // 统计信息
 	logger        Logger                // 日志接口
-	evictType     string                //	驱逐类型
+	evictType     string                // 驱逐类型
 	size          int                   // 当前缓存大小
 	maxMemerySize int                   // 最大内存大小
 	itemsCount    int                   // 项目计数
@@ -306,13 +306,13 @@ func (s *cacheShard) set(key string, value interface{}, ttl time.Duration) error
 	now := time.Now()
 	expireAt := now.Add(ttl)
 
-	entry := &cacheItem{
-		key:          key,
-		value:        value,
-		size:         size,
-		expireAt:     expireAt,
-		accessedAt:   now,
-		accessedSize: 1,
+	item := &cacheItem{
+		key:        key,
+		value:      value,
+		size:       size,
+		expireAt:   expireAt,
+		accessedAt: now,
+		accesseds:  1,
 	}
 
 	// 添加或更新
@@ -322,16 +322,16 @@ func (s *cacheShard) set(key string, value interface{}, ttl time.Duration) error
 		s.removeFromHeap(existing)
 		s.removeFromList(existing)
 
-		*existing = *entry
+		*existing = *item
 	} else {
 		// 添加新项
-		s.items[key] = entry
+		s.items[key] = item
 		s.stats.ItemsCount++
 	}
 
 	// 添加数据结构
-	s.addToList(entry)
-	s.addToHeap(entry)
+	s.addToList(item)
+	s.addToHeap(item)
 	s.size += size
 
 	s.stats.Size = s.size
@@ -413,8 +413,8 @@ func (s *cacheShard) removeItem(item *cacheItem) {
 
 // get 获取缓存
 func (s *cacheShard) get(key string) (interface{}, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	item, ok := s.items[key]
 	if !ok {
@@ -434,7 +434,7 @@ func (s *cacheShard) get(key string) (interface{}, bool, error) {
 
 	// 更新访问信息
 	item.accessedAt = time.Now()
-	item.accessedSize++
+	item.accesseds++
 
 	// 更新LRU链表位置
 	if s.evictType == "LRU" && item.element != nil {
