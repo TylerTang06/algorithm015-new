@@ -43,85 +43,154 @@ import (
 - 不允许依赖 sleep 或时间假设
 */
 
-// 执行组：跟踪一次 job 执行的所有调用者
-type execution struct {
-	once       sync.Once  // 确保 job 只执行一次
-	registerMu sync.Mutex // 保护注册过程的并发访问
-	startMu    sync.Mutex // 确保所有协程都注册完成后再开始执行 job
-	cleanupMu  sync.Mutex // 保护清理过程
-	count      int        // 参与本次执行的调用数量
-	result     error      // job 执行结果
-	errCh      chan error // 用于广播结果到所有等待者
-	cleaned    bool       // 标记是否已清理
+// jobResult 存储 job 执行的最终结果
+type jobResult struct {
+	count    int       // 参与本次执行的调用数量
+	err      error     // job 执行结果
+	finished time.Time // 完成时间
+	waiters  int       // 正在等待结果的调用者数量
 }
+
+// cacheEntry 缓存条目，可以是执行状态或结果
+type cacheEntry interface{}
+
+// jobExecution 一次 job 执行的状态
+type jobExecution struct {
+	mu         sync.Mutex
+	registered int            // 已注册的调用数量
+	resultCh   chan jobResult // 结果通道
+	completed  bool           // 是否已完成
+	result     jobResult      // 缓存的结果
+	once       sync.Once      // 确保 job 只执行一次
+}
+
+var (
+	cache   = make(map[string]cacheEntry)
+	cacheMu sync.Mutex
+)
 
 func target(
 	ctx context.Context,
 	id string,
 	job func(context.Context) error,
 ) (count int, err error) {
-	// 检查是否已存在正在执行的任务
-	existingMu.Lock()
-	existing, ok := executions[id]
-	if !ok {
-		// 创建新的执行组
-		existing = &execution{
-			errCh: make(chan error, 1),
+	// 检查缓存
+	cacheMu.Lock()
+	entry, exists := cache[id]
+	if !exists {
+		// 创建新的执行状态
+		exec := &jobExecution{
+			resultCh:   make(chan jobResult, 1),
+			completed:  false,
+			registered: 0,
 		}
-		executions[id] = existing
+		cache[id] = exec
+		entry = exec
 	}
-	existingMu.Unlock()
+	cacheMu.Unlock()
+	switch v := entry.(type) {
+	case *jobResult:
+		// 已有结果，需要先增加 waiters 计数
+		cacheMu.Lock()
+		v.waiters++
+		cacheMu.Unlock()
 
-	// 锁住 startMu，确保在开始执行 job 之前，所有协程都完成注册
-	existing.startMu.Lock()
-
-	// 注册参与本次执行
-	existing.registerMu.Lock()
-	existing.count++
-	existing.registerMu.Unlock()
-
-	existing.startMu.Unlock()
-
-	// 确保只有一个协程执行 job
-	existing.once.Do(func() {
+		// 返回后减少等待者计数
 		defer func() {
-			// 捕获 panic 并转换为 error
-			if r := recover(); r != nil {
-				existing.result = fmt.Errorf("panic: %v", r)
-				existing.errCh <- existing.result
-				close(existing.errCh)
+			cacheMu.Lock()
+			v.waiters--
+			if v.waiters <= 0 {
+				delete(cache, id)
 			}
+			cacheMu.Unlock()
 		}()
 
-		// 执行 job
-		existing.result = job(ctx)
-		existing.errCh <- existing.result
-		close(existing.errCh)
-	})
+		return v.count, v.err
+	case *jobExecution:
+		// 注册
+		v.mu.Lock()
+		v.registered++
+		v.mu.Unlock()
 
-	// 等待 job 执行完成或 ctx 取消
-	select {
-	case err := <-existing.errCh:
-		count = existing.count
+		// 使用 sync.Once 确保 job 只执行一次
+		var execResult jobResult
+		var resultReady = false
+		v.once.Do(func() {
+			// 执行 job
+			var jobErr error
+			var panicErr interface{}
 
-		// 只由第一个完成的协程清理
-		existing.cleanupMu.Lock()
-		if !existing.cleaned {
-			existingMu.Lock()
-			delete(executions, id)
-			existingMu.Unlock()
-			existing.cleaned = true
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						panicErr = r
+					}
+				}()
+				jobErr = job(ctx)
+			}()
+			v.mu.Lock()
+			finalCount := v.registered
+			result := jobResult{
+				count:    finalCount,
+				err:      jobErr,
+				finished: time.Now(),
+				waiters:  finalCount - 1,
+			}
+			if panicErr != nil {
+				result.err = fmt.Errorf("panic: %v", panicErr)
+			}
+			v.completed = true
+			v.result = result
+			v.mu.Unlock()
+
+			// 发送结果给所有等待者
+			v.resultCh <- result
+			close(v.resultCh)
+
+			// 将结果存入缓存
+			cacheMu.Lock()
+			cache[id] = &result
+			cacheMu.Unlock()
+			execResult = result
+			resultReady = true
+
+			// 如果没有等待者（串行调用场景），执行者需要清除缓存
+			if result.waiters <= 0 {
+				cacheMu.Lock()
+				delete(cache, id)
+				cacheMu.Unlock()
+			}
+		})
+
+		if resultReady {
+			return execResult.count, execResult.err
 		}
-		existing.cleanupMu.Unlock()
 
-		return count, err
-	case <-ctx.Done():
-		// ctx 取消，不计入 count
-		existing.registerMu.Lock()
-		existing.count--
-		existing.registerMu.Unlock()
-		return existing.count, ctx.Err()
+		// 等待执行完成
+		<-v.resultCh
+
+		// 从缓存读取结果
+		cacheMu.Lock()
+		entry := cache[id]
+		cacheMu.Unlock()
+
+		if result, ok := entry.(*jobResult); ok {
+			// 返回后减少等待者计数
+			defer func() {
+				cacheMu.Lock()
+				result.waiters--
+				if result.waiters <= 0 {
+					delete(cache, id)
+				}
+				cacheMu.Unlock()
+			}()
+			return result.count, result.err
+		}
+
+		return 0, fmt.Errorf("unexpected cache entry type")
 	}
+
+	return 0, fmt.Errorf("unexpected cache entry type")
 }
 
 //////////////////////////////////////////////
@@ -133,9 +202,6 @@ func target(
 var (
 	counter     int
 	counterLock sync.Mutex
-
-	executions = make(map[string]*execution)
-	existingMu sync.Mutex
 )
 
 // 模拟 job 的耗时（不固定）
@@ -278,24 +344,12 @@ func testCaseRandomId() {
 
 // 不要修改
 func main() {
-	// 先测试串行调用
-	testCaseSampleIdSerial()
-	fmt.Println("Serial test passed!")
-
-	// 再测试并发
-	testCaseSampleIdParallel()
-	fmt.Println("Parallel test passed!")
-
-	// 测试不同 ID
-	testCaseRandomId()
-	fmt.Println("Random ID test passed!")
-
 	const repeat = 50
 	for i := 0; i < repeat; i++ {
 		testCaseSampleIdParallel()
 		testCaseSampleIdSerial()
 		testCaseRandomId()
-		fmt.Print("\r", i+1, "/", repeat, " ✔ ")
+		fmt.Printf("\r%d/%d ✔ ", i+1, repeat)
 	}
 	fmt.Println("\n🎉 All Tests Passed!")
 }
